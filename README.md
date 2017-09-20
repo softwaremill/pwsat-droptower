@@ -23,5 +23,6 @@ Responsible pins for controlling the relays are:
 * Relay 3 (REL 3)	D8
 * Relay 4  (REL 4)	D12
 
+Example file `relay-control.ino` switches on and off all the relays simultaneously.
 
 ## Writing to SD Card
