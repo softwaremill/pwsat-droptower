@@ -49,6 +49,8 @@ int16_t gx, gy, gz;
 File dataFile;
 
 #define LED_PIN 5
+#define RELAY_PIN 3
+
 bool blinkState = false;
 
 void setup() {
@@ -84,6 +86,9 @@ void setup() {
   Serial.println(accelgyro.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   
   pinMode(LED_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  
+  digitalWrite(RELAY_PIN, true);
 }
 
 unsigned long time;
@@ -101,6 +106,11 @@ void loop() {
   if (!dataFile) {
     // if the file isn't open, pop up an error:
     Serial.println("error opening datalog.txt");
+    Serial.println("Trying to initialize the SD again");
+    
+    if (!SD.begin(SdChipSelect)) {
+      Serial.println("Card failed, or not present");
+    }
   } else {
   
     for(int i = 0; i < 100; i++) {
@@ -132,6 +142,13 @@ void loop() {
       // print to the serial port too:
       // This takes roughly 8-10 millis overhead
       //Serial.println(dataString);
+      
+      // If the device is turned to the side, close relay
+      if (ax > 14000) {
+        digitalWrite(RELAY_PIN, false);
+      } else {
+        digitalWrite(RELAY_PIN, true);
+      }
     } // end for loop
   
     blinkState = !blinkState;
@@ -139,12 +156,3 @@ void loop() {
     dataFile.close();
   }
 }
-
-
-
-
-
-
-
-
-
