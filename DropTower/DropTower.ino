@@ -19,8 +19,8 @@
 
 
 #include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library
-#include <SPI.h>                      // SD writing capability
-#include <SD.h>                       // SD writing capability
+#include <SPI.h>
+#include "SdFat.h"
 
 /*
  * !!! IMPORTANT !!!
@@ -30,15 +30,24 @@
 #define RELAY_2  7
 #define RELAY_3  8
 #define RELAY_4  12  //cannot be used together with SD Card reader
+#define FILE_BASE_NAME "Data"
 
 ADXL345 adxl = ADXL345();             
-const int CHIP_SELECT = 4;             //needed to set up SPI communication on the ethernet shield
+const uint8_t chipSelect = 4;            //needed to set up SPI communication on the ethernet shield
 const int FREE_FALL_THRESHOLD = 7;      // (5 - 9) recommended - 62.5mg per increment
 const int FREE_FALL_DURATION = 30;      // (20 - 70) recommended - 5ms per increment   
-const String LOG_FILE_NAME = "datalog2.txt";
+const int MAX_TIME = 1000;
+const uint32_t SAMPLE_INTERVAL_MS = 100;
 bool freeFallDetected = false;          // Free Fall detection flag
 
+// File system object.
+SdFat sd;
+// Log file.
+SdFile file;
+// Time in micros for next data record.
+uint32_t logTime;
 
+#define error(msg) sd.errorHalt(F(msg))
 void setup() {
   Serial.begin(9600);                 // Start the serial terminal
   while (!Serial) {
@@ -50,44 +59,77 @@ void setup() {
 }
 
 void loop() {
-  String dataString = "";                 //data to be written to sd card
+ 
+  ADXL_ISR();
+ 
+  if(freeFallDetected) {
+    relay_2_On();
+  }
+
+  logData();
+
+  // Force data to SD and update the directory entry to avoid data loss.
+  if (!file.sync() || file.getWriteError()) {
+    error("write error");
+  }
+
+  if (Serial.available()) {
+    // Close file and stop.
+    file.close();
+    Serial.println(F("Done"));
+    SysCall::halt();
+  }
+}
+
+void logData() {
    // Accelerometer Readings
   int x,y,z;   
   adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
 
-  dataString += String(x);
-  dataString += ";";
-  dataString += String(y);
-  dataString += ";";
-  dataString += String(z);
-  dataString += ";";
-  dataString += String(freeFallDetected);
-  dataString += ";";
-  dataString += String(millis());
-
-  // open the file. note that only one file can be open at a time,
-  // so you have to close this one before opening another.
-//  File dataFile = SD.open(LOG_FILE_NAME, FILE_WRITE);
-//  if (dataFile) {
-//    dataFile.println(dataString);
-//    dataFile.close();
-//    // print to the serial port too:
-//    Serial.println(dataString);
-//  }
-  
-  ADXL_ISR();
-  
-  if(freeFallDetected){
-    relay_2_On();
-  }
+  file.print(String(millis()));
+  file.write(',');
+  file.print(x);
+  file.write(',');
+  file.print(y);
+  file.write(',');
+  file.print(z);
+  file.write(',');
+  file.print(String(freeFallDetected));
+  file.println();
+  Serial.println("recorded");
 }
-
 void setUpSDDevice() {
-  if (!SD.begin(CHIP_SELECT)) {
-    Serial.println("Card failed, or not present");
-    // don't do anything more:
-    return;
+  const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
+  char fileName[13] = FILE_BASE_NAME "00.csv";
+  delay(1000);
+  // Initialize at the highest speed supported by the board that is
+  // not over 50 MHz. Try a lower speed if SPI errors occur.
+  if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
+    sd.initErrorHalt();
   }
+  if (BASE_NAME_SIZE > 6) {
+    error("FILE_BASE_NAME too long");
+  }
+  while (sd.exists(fileName)) {
+    if (fileName[BASE_NAME_SIZE + 1] != '9') {
+      fileName[BASE_NAME_SIZE + 1]++;
+    } else if (fileName[BASE_NAME_SIZE] != '9') {
+      fileName[BASE_NAME_SIZE + 1] = '0';
+      fileName[BASE_NAME_SIZE]++;
+    } else {
+      error("Can't create file name");
+    }
+  }
+  if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
+    error("file.open");
+  }
+  Serial.print(F("Logging to: "));
+  Serial.println(fileName);
+  // Write data header.
+  writeHeader();
+  // Start on a multiple of the sample interval.
+  logTime = micros()/(1000UL*SAMPLE_INTERVAL_MS) + 1;
+  logTime *= 1000UL*SAMPLE_INTERVAL_MS;
   Serial.println("card initialized.");
 }
 
@@ -174,5 +216,15 @@ void relay_3_On() {
 }
 void relay_3_Off() {
   digitalWrite(RELAY_3, LOW);
+}
+
+//SD writing helpers
+void writeHeader() {
+  file.print(F("milis"));
+  file.print(F(",x"));
+  file.print(F(",y"));
+  file.print(F(",z"));
+  file.print(F(",state"));
+  file.println();
 }
 
