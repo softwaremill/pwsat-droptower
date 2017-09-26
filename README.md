@@ -45,6 +45,10 @@ Executed tests with writing short strings into sd card:
 * d - additional data where FF indicates the point where the Free Fall was detected
 * t - time in miliseconds since the program started (used just for testing purposes)
 
+Experiment data: 
+
+16.9 MB after 2.5 h of work
+
 **Important!!**
 
 While writing to SD card the maximum frequency achieved during tests as about 27 ms, which means that only about 3 writes per second are possible. 
