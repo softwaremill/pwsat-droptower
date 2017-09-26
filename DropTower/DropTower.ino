@@ -24,7 +24,7 @@
 
 /*
  * !!! IMPORTANT !!!
- * Done tuse relay 1 and 4 while the SD card reader with chip select 4 is in use.
+ * Don't use relay 1 and 4 while the SD card reader with chip select 4 is in use.
  */
 #define RELAY_1  4 //cannot be used together with SD Card reader
 #define RELAY_2  7
@@ -96,7 +96,6 @@ void logData() {
   file.write(',');
   file.print(String(freeFallDetected));
   file.println();
-  Serial.println("recorded");
 }
 void setUpSDDevice() {
   const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
@@ -178,7 +177,7 @@ void setUpAccDevice() {
 void setUpRelaysDevice() {
   /*
    * !!! IMPORTANT !!!
-   * Done tuse relay 1 and 4 while the SD card reader with chip select 4 is in use.
+   * Don't use relay 1 and 4 while the SD card reader with chip select 4 is in use.
    */
   //  pinMode(RELAY_1, OUTPUT);
   pinMode(RELAY_2, OUTPUT);
