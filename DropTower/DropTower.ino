@@ -1,13 +1,13 @@
-/*  ********************************************* 
+/*  *********************************************
  *  Softwaremill Drop Tower Module Software
- *  
+ *
  *  Developers:
  *  krzysztof.grajek@softwaremill.com
  *  pawel.stawicki@softwaremill.com
- *  
+ *
  *  Development Environment Specifics:
  *  Arduino 1.6.11
- *  
+ *
  *  Hardware Specifications:
  *  SparkFun ADXL345
  *  Arduino Uno
@@ -32,10 +32,10 @@
 #define RELAY_4  12  //cannot be used together with SD Card reader
 #define FILE_BASE_NAME "Data"
 
-ADXL345 adxl = ADXL345();             
+ADXL345 adxl = ADXL345();
 const uint8_t chipSelect = 4;            //needed to set up SPI communication on the ethernet shield
 const int FREE_FALL_THRESHOLD = 7;      // (5 - 9) recommended - 62.5mg per increment
-const int FREE_FALL_DURATION = 30;      // (20 - 70) recommended - 5ms per increment   
+const int FREE_FALL_DURATION = 30;      // (20 - 70) recommended - 5ms per increment
 const int MAX_TIME = 1000;
 const uint32_t SAMPLE_INTERVAL_MS = 100;
 bool freeFallDetected = false;          // Free Fall detection flag
@@ -59,9 +59,9 @@ void setup() {
 }
 
 void loop() {
- 
+
   ADXL_ISR();
- 
+
   if(freeFallDetected) {
     relay_2_On();
   }
@@ -83,7 +83,7 @@ void loop() {
 
 void logData() {
    // Accelerometer Readings
-  int x,y,z;   
+  int x,y,z;
   adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
 
   file.print(String(millis()));
@@ -97,6 +97,7 @@ void logData() {
   file.print(String(freeFallDetected));
   file.println();
 }
+
 void setUpSDDevice() {
   const uint8_t BASE_NAME_SIZE = sizeof(FILE_BASE_NAME) - 1;
   char fileName[13] = FILE_BASE_NAME "00.csv";
@@ -135,7 +136,7 @@ void setUpSDDevice() {
 void setUpAccDevice() {
   Serial.println("SparkFun ADXL345 Accelerometer");
   Serial.println();
-  
+
   adxl.powerOn();                     // Power on the ADXL345
 
   adxl.setRangeSetting(16);           // Give the range settings
@@ -145,23 +146,23 @@ void setUpAccDevice() {
 
   adxl.setSpiBit(0);                  // Configure the device to be in 4 wire SPI mode when set to '0' or 3 wire SPI mode when set to 1
                                       // Default: Set to 1
-                                      // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
-   
+                                      // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library
+
   adxl.setActivityXYZ(1, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setActivityThreshold(75);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
- 
+
   adxl.setInactivityXYZ(1, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setInactivityThreshold(75);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
   adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
 
   adxl.setTapDetectionOnXYZ(0, 0, 1); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
- 
+
   // Set values for what is considered a TAP and what is a DOUBLE TAP (0-255)
   adxl.setTapThreshold(50);           // 62.5 mg per increment
   adxl.setTapDuration(15);            // 625 μs per increment
   adxl.setDoubleTapLatency(80);       // 1.25 ms per increment
   adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
- 
+
   // Set values for what is considered FREE FALL (0-255)
   adxl.setFreeFallThreshold(FREE_FALL_THRESHOLD);       // (5 - 9) recommended - 62.5mg per increment
   adxl.setFreeFallDuration(FREE_FALL_DURATION);       // (20 - 70) recommended - 5ms per increment
@@ -193,13 +194,18 @@ void ADXL_ISR() {
   if(adxl.triggered(interrupts, ADXL345_FREE_FALL)){
     Serial.println("*** FREE FALL ***");
     freeFallDetected = true;
-  } 
-  // LEFT FOR TESTING PURPOSES ONLY
-  // Tap Detection
-//  if(adxl.triggered(interrupts, ADXL345_SINGLE_TAP)){
-//    Serial.println("*** TAP ***");
-//    freeFallDetected = true;
-//  } 
+  }
+
+  if(adxl.triggered(interrupts, ADXL345_DOUBLE_TAP)){
+    Serial.println("*** DOUBLE TAP ***");
+    if(file.isOpen()) {
+      file.close();
+      Serial.println(F("Done"));
+      Serial.println(F("Restarting SD card..."));
+      setUpSDDevice();
+      Serial.println(F("Restarted."));
+    }
+  }
 }
 
 // manage relays on/off state
@@ -226,4 +232,3 @@ void writeHeader() {
   file.print(F(",state"));
   file.println();
 }
-
