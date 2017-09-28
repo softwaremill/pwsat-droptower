@@ -23,33 +23,30 @@ Responsible pins for controlling the relays are:
 * Relay 3 (REL 3)	D8
 * Relay 4  (REL 4)	D12
 
-Example file `relay-control.ino` switches on and off all the relays simultaneously.
+***Important***
+
+Please not that using ethernet shield (for SD card capabilities) and Relay Shield together the relay 1 nad 4 needs to be switched off as the pins streering them are used by the ethernet shield itself.
+
 
 ## Writing to SD Card
 
+For writing to SD the extnal Arduino library was used. The library is called [SdFat](https://github.com/greiman/SdFat) and its much faster compared to the standard one available out of the box.
+
 Executed tests with writing short strings into sd card:
 
-|  x    |    y   |  z   |  d |  t  | 
-|-------|--------|------|----|-----| 
-| 3.434 | 5.2342 | 2.22 | -- | 10  | 
-| 3.434 | 5.2342 | 2.22 | -- | 33  | 
-| 3.434 | 5.2342 | 2.22 | -- | 57  | 
-| 3.434 | 5.2342 | 2.22 | -- | 83  | 
-| 3.434 | 5.2342 | 2.22 | -- | 107 | 
-| 3.434 | 5.2342 | 2.22 | -- | 131 | 
-| 3.434 | 5.2342 | 2.22 | FF | 155 | 
-| 3.434 | 5.2342 | 2.22 | FF | 179 | 
-| 3.434 | 5.2342 | 2.22 | FF | 202 | 
+| milis | x    | y    | z    | state |
+|-------|------|------|------|-------|
+| 1058  | 7    | -35  | 6    | 0     |
+| 1067  | 8    | -37  | 5    | 0     |
+| 1076  | 8    | -35  | 6    | 0     |
+| 1085  | 9    | -33  | 5    | 0     |
 
 * x,y,z - readings from accelerometer
-* d - additional data where FF indicates the point where the Free Fall was detected
-* t - time in miliseconds since the program started (used just for testing purposes)
+* state - additional data where FF indicates the point where the Free Fall was detected
+* milis - time in miliseconds since the program started (used just for testing purposes)
 
 Experiment data: 
 
 16.9 MB after 2.5 h of work
 
-**Important!!**
-
-While writing to SD card the maximum frequency achieved during tests as about 27 ms, which means that only about 3 writes per second are possible. 
-This needs additional testing with faster SD cards, smaller data to write and/or same caching of the data before writing it down to SD card.
+Example data can be found in the repo itslef under `example-data.csv`
