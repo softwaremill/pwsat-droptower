@@ -1,3 +1,5 @@
+
+
 /*  *********************************************
  *  Softwaremill Drop Tower Module Software
  *
@@ -30,7 +32,12 @@
 #define RELAY_2  7
 #define RELAY_3  8
 #define RELAY_4  12  //cannot be used together with SD Card reader
-#define FILE_BASE_NAME "Data"
+#define FILE_BASE_NAME "LOGSML"
+#define LED 8
+#define SWITCH 6
+#define SELECT_MODE A1
+
+bool FREE_FALL_DETECTION_MODE = false;
 
 ADXL345 adxl = ADXL345();
 const uint8_t chipSelect = 4;            //needed to set up SPI communication on the ethernet shield
@@ -38,7 +45,11 @@ const int FREE_FALL_THRESHOLD = 7;      // (5 - 9) recommended - 62.5mg per incr
 const int FREE_FALL_DURATION = 30;      // (20 - 70) recommended - 5ms per increment
 const int MAX_TIME = 1000;
 const uint32_t SAMPLE_INTERVAL_MS = 100;
-bool freeFallDetected = false;          // Free Fall detection flag
+const uint32_t SWITCH_DELAY_MS = 100;
+bool freeFallDetected = false;
+bool switchDetected = false;
+bool adxlFailed = false;
+uint32_t timeStampOfDetection = 0;
 
 // File system object.
 SdFat sd;
@@ -46,56 +57,126 @@ SdFat sd;
 SdFile file;
 // Time in micros for next data record.
 uint32_t logTime;
+bool skipSD = false;
 
-#define error(msg) sd.errorHalt(F(msg))
+//#define error(msg) sd.errorHalt(F(msg))
 void setup() {
-  Serial.begin(9600);                 // Start the serial terminal
+  Serial.begin(250000);                 // Start the serial terminal
   while (!Serial) {
     ; // wait for serial port to connect. Needed for native USB port only
   }
+
+  pinMode(LED, OUTPUT);
+  pinMode(SWITCH, INPUT);
+  pinMode(SELECT_MODE, INPUT);
+  
   setUpSDDevice();
   setUpAccDevice();
   setUpRelaysDevice();
+
+  FREE_FALL_DETECTION_MODE = digitalRead(SELECT_MODE);
+
+  if (FREE_FALL_DETECTION_MODE) {
+    Serial.println("Detection mode: free fall!");
+  } else {
+    Serial.print("Detection mode: switch! Delay ");
+    Serial.print(SWITCH_DELAY_MS);
+    Serial.println("ms.");
+  }
 }
+
+uint8_t counter = 100;
 
 void loop() {
 
-  ADXL_ISR();
+  if (!adxlFailed)
+    ADXL_ISR();
 
-  if(freeFallDetected) {
+  if(FREE_FALL_DETECTION_MODE and freeFallDetected) {
     relay_2_On();
   }
 
-  logData();
+  logData(skipSD);
 
   // Force data to SD and update the directory entry to avoid data loss.
-  if (!file.sync() || file.getWriteError()) {
-    error("write error");
+  if (!skipSD and (!file.sync() or file.getWriteError())) {
+    skipSD = true;
+    Serial.println("SD card skipped!");
   }
 
   if (Serial.available()) {
-    // Close file and stop.
-    file.close();
-    Serial.println(F("Done"));
-    SysCall::halt();
+    int incomingByte = Serial.read();
+    if (incomingByte == 's') {
+      // Close file and stop.
+      file.close();
+      Serial.println(F("Done"));
+      //SysCall::halt();
+    }
   }
+
+  if (counter > 10) {
+    counter--;
+    if (!digitalRead(RELAY_2))
+      digitalWrite(LED, LOW);
+  } else {
+    counter = 100;
+    if (!digitalRead(RELAY_2))
+      digitalWrite(LED, HIGH);
+  }
+
+  if (!digitalRead(SWITCH)) {
+    switchDetected = true;
+    if (!FREE_FALL_DETECTION_MODE and !digitalRead(RELAY_2)) {
+
+      if (timeStampOfDetection == 0)
+        timeStampOfDetection = millis();
+    }
+  }
+
+  if (!FREE_FALL_DETECTION_MODE and switchDetected and !digitalRead(RELAY_2) and ((millis() - timeStampOfDetection) > SWITCH_DELAY_MS))
+    relay_2_On();
 }
 
-void logData() {
+void logData(bool skipSD) {
    // Accelerometer Readings
   int x,y,z;
-  adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
+  x = 0;
+  y = 0;
+  z = 0;
+  if (!adxlFailed)
+    adxl.readAccel(&x, &y, &z);         // Read the accelerometer values and store them in variables declared above x,y,z
 
-  file.print(String(millis()));
-  file.write(',');
-  file.print(x);
-  file.write(',');
-  file.print(y);
-  file.write(',');
-  file.print(z);
-  file.write(',');
-  file.print(String(freeFallDetected));
-  file.println();
+  if (!skipSD) {
+    file.print(String(millis()));
+    file.write(',');
+    file.print(x);
+    file.write(',');
+    file.print(y);
+    file.write(',');
+    file.print(z);
+    file.write(',');
+    file.print(String(freeFallDetected));
+    file.print(',');
+    file.print(String(switchDetected));
+    file.print(',');
+    file.print(String(digitalRead(RELAY_2)));
+    file.println();
+  }
+
+  Serial.print(String(millis()));
+  Serial.print(',');
+  Serial.print(x);
+  Serial.print(',');
+  Serial.print(y);
+  Serial.print(',');
+  Serial.print(z);
+  Serial.print(',');
+  Serial.print(String(freeFallDetected));
+  Serial.print(',');
+  Serial.print(String(switchDetected));
+  Serial.print(',');
+  Serial.print(String(digitalRead(RELAY_2)));
+  Serial.println();
 }
 
 void setUpSDDevice() {
@@ -105,10 +186,11 @@ void setUpSDDevice() {
   // Initialize at the highest speed supported by the board that is
   // not over 50 MHz. Try a lower speed if SPI errors occur.
   if (!sd.begin(chipSelect, SD_SCK_MHZ(50))) {
-    sd.initErrorHalt();
+    //sd.initErrorHalt();
+    Serial.print("SD init error!");
   }
   if (BASE_NAME_SIZE > 6) {
-    error("FILE_BASE_NAME too long");
+    Serial.print("FILE_BASE_NAME too long");
   }
   while (sd.exists(fileName)) {
     if (fileName[BASE_NAME_SIZE + 1] != '9') {
@@ -117,11 +199,11 @@ void setUpSDDevice() {
       fileName[BASE_NAME_SIZE + 1] = '0';
       fileName[BASE_NAME_SIZE]++;
     } else {
-      error("Can't create file name");
+      Serial.print("Can't create file name");
     }
   }
   if (!file.open(fileName, O_CREAT | O_WRITE | O_EXCL)) {
-    error("file.open");
+    Serial.print("file.open");
   }
   Serial.print(F("Logging to: "));
   Serial.println(fileName);
@@ -189,6 +271,13 @@ void setUpRelaysDevice() {
 void ADXL_ISR() {
   // getInterruptSource clears all triggered actions after returning value
   // Do not call again until you need to recheck for triggered actions
+  if (!digitalRead(A4) or !digitalRead(A5)) {
+    Serial.println("I2C latched! New detection mode: Switch mode!");
+    FREE_FALL_DETECTION_MODE = 0;
+    adxlFailed = true;
+    return;
+  }
+
   byte interrupts = adxl.getInterruptSource();
   // Free Fall Detection
   if(adxl.triggered(interrupts, ADXL345_FREE_FALL)){
@@ -196,24 +285,26 @@ void ADXL_ISR() {
     freeFallDetected = true;
   }
 
-  if(adxl.triggered(interrupts, ADXL345_DOUBLE_TAP)){
-    Serial.println("*** DOUBLE TAP ***");
-    if(file.isOpen()) {
-      file.close();
-      Serial.println(F("Done"));
-      Serial.println(F("Restarting SD card..."));
-      setUpSDDevice();
-      Serial.println(F("Restarted."));
-    }
-  }
+  //if(adxl.triggered(interrupts, ADXL345_DOUBLE_TAP)){
+  //  Serial.println("*** DOUBLE TAP ***");
+  //  if(file.isOpen()) {
+  //    file.close();
+  //    Serial.println(F("Done"));
+  //    Serial.println(F("Restarting SD card..."));
+  //   setUpSDDevice();
+  //    Serial.println(F("Restarted."));
+  //}
+  //}
 }
 
 // manage relays on/off state
 void relay_2_On() {
   digitalWrite(RELAY_2, HIGH);
+  digitalWrite(LED, HIGH);
 }
 void relay_2_Off() {
   digitalWrite(RELAY_2, LOW);
+  digitalWrite(LED, LOW);
 }
 
 void relay_3_On() {
@@ -229,6 +320,8 @@ void writeHeader() {
   file.print(F(",x"));
   file.print(F(",y"));
   file.print(F(",z"));
+  file.print(F(",ffall"));
+  file.print(F(",switch"));
   file.print(F(",state"));
   file.println();
 }
