@@ -8,7 +8,7 @@
  *  pawel.stawicki@softwaremill.com
  *  
  *  Testing and some improvements:
- *  kontakt@piotrkuligoski.pl
+ *  kontakt@piotrkuligowski.pl
  *  
  *  Development Environment Specifics:
  *  Arduino 1.6.11
